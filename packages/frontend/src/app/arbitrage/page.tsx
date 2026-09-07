@@ -208,6 +208,36 @@ function formatSurplusSigned(raw: string | number | bigint, symbol: string): str
   return `${neg ? '' : '+'}${formatted} ${symbol}`;
 }
 
+function downloadCsv(rows: DailyProfit[], granularity: ProfitGranularity): void {
+  const header = [
+    'period_start',
+    'period',
+    'success_count',
+    'failed_count',
+    'total_count',
+    'xlm_surplus_raw',
+    'usdc_surplus_raw',
+  ];
+  const body = rows.map((row) => [
+    row.start,
+    row.label,
+    row.successCount,
+    row.failedCount,
+    row.txCount,
+    row.xlm.toString(),
+    row.usdc.toString(),
+  ]);
+  const csv = [header, ...body]
+    .map((line) => line.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+  const url = URL.createObjectURL(new Blob([`${csv}\n`], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `lumagg-arbitrage-${granularity}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ArbitragePage() {
   const tokens = useTokenList();
   const [stats, setStats] = useState<StatsPayload | null>(null);
@@ -224,6 +254,8 @@ export default function ArbitragePage() {
   const [profitLoading, setProfitLoading] = useState(false);
   const [showDailyTable, setShowDailyTable] = useState(false);
   const [hoveredProfitDay, setHoveredProfitDay] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const tokenLabels = useMemo(
     () => new Map(tokens.map((token) => [token.id, token.symbol])),
     [tokens],
@@ -251,6 +283,7 @@ export default function ArbitragePage() {
         });
         setFailureReasons(arbRes.data?.failure_reasons ?? []);
         setNextCursor(arbRes.data?.next_cursor ?? null);
+        setLastUpdated(new Date());
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -260,7 +293,7 @@ export default function ArbitragePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -294,7 +327,7 @@ export default function ArbitragePage() {
     return () => {
       cancelled = true;
     };
-  }, [profitGranularity, profitRange]);
+  }, [profitGranularity, profitRange, refreshKey]);
 
   const summary = useMemo(() => {
     if (!stats) return null;
@@ -412,6 +445,12 @@ export default function ArbitragePage() {
     }
   }
 
+  const confirmedSuccess = statusCounts.success_count ?? 0;
+  const confirmedFailed = statusCounts.failed_count ?? 0;
+  const confirmedTotal = confirmedSuccess + confirmedFailed;
+  const successRate =
+    confirmedTotal > 0 ? `${((confirmedSuccess / confirmedTotal) * 100).toFixed(1)}%` : '—';
+
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -424,6 +463,38 @@ export default function ArbitragePage() {
             callers pay gas. Gross surplus is base token returned minus base supplied — fees are not
             deducted, so this is not net P&amp;L.
           </p>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              setRefreshKey((value) => value + 1);
+            }}
+            disabled={loading}
+            className="text-[12px] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)]/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] disabled:cursor-wait disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {lastUpdated && (
+            <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+              Updated{' '}
+              {lastUpdated.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => downloadCsv(visibleDailyProfit, profitGranularity)}
+            disabled={profitLoading || visibleDailyProfit.length === 0}
+            className="text-[12px] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)]/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+          >
+            Export CSV
+          </button>
         </div>
         <Link
           href="/stats"
@@ -509,14 +580,12 @@ export default function ArbitragePage() {
       <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 overflow-hidden">
         <div className="px-4 sm:px-5 pt-4 pb-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
           <div>
-            <h2 className="text-[15px] font-medium text-[var(--text-primary)]">
-              {profitHeading}
-            </h2>
+            <h2 className="text-[15px] font-medium text-[var(--text-primary)]">{profitHeading}</h2>
             <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
               Indexed round-trip transactions · surplus is from successful transactions
             </p>
           </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-[var(--text-muted)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-[var(--text-muted)]">
             <div className="flex flex-wrap items-center gap-1">
               <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg-0)]/50 p-0.5">
                 {(['hour', 'day', 'week', 'month'] as const).map((granularity) => (
@@ -609,7 +678,8 @@ export default function ArbitragePage() {
                             </span>
                           </div>
                           <div className="mt-1 border-t border-[var(--border)] pt-1 text-[var(--text-muted)]">
-                            {day.successCount} success · {day.failedCount} failed · {day.txCount} total
+                            {day.successCount} success · {day.failedCount} failed · {day.txCount}{' '}
+                            total
                           </div>
                         </div>
                       )}
@@ -619,14 +689,14 @@ export default function ArbitragePage() {
                           style={{
                             height: `${Math.max(xlmHeight, day.xlm !== BigInt(0) ? 3 : 0)}%`,
                           }}
-                            title={`${day.label}: ${formatSurplusSigned(day.xlm, 'XLM')}`}
+                          title={`${day.label}: ${formatSurplusSigned(day.xlm, 'XLM')}`}
                         />
                         <div
                           className="w-full max-w-5 rounded-t bg-sky-300/85 transition-all group-hover:bg-sky-200"
                           style={{
                             height: `${Math.max(usdcHeight, day.usdc !== BigInt(0) ? 3 : 0)}%`,
                           }}
-                            title={`${day.label}: ${formatSurplusSigned(day.usdc, 'USDC')}`}
+                          title={`${day.label}: ${formatSurplusSigned(day.usdc, 'USDC')}`}
                         />
                       </div>
                       <span className="truncate text-center text-[10px] text-[var(--text-muted)]">
@@ -712,9 +782,13 @@ export default function ArbitragePage() {
           value={statusCounts.failed_count?.toLocaleString() ?? '—'}
           tone="failed"
         />
+        <StatusCard label="Success rate" value={successRate} tone="neutral" />
         <div className="col-span-2 sm:col-span-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-4 py-3 text-[11px] text-[var(--text-muted)]">
           <div className="text-[var(--text-secondary)]">Status scope</div>
-          <div className="mt-1 leading-relaxed">Indexed on-chain round trips only. Bot broadcasts still awaiting confirmation are not included.</div>
+          <div className="mt-1 leading-relaxed">
+            Indexed on-chain round trips only. Bot broadcasts still awaiting confirmation are not
+            included.
+          </div>
         </div>
       </section>
 
@@ -722,7 +796,9 @@ export default function ArbitragePage() {
         <section className="rounded-xl border border-rose-300/15 bg-[var(--surface)]/60 overflow-hidden">
           <div className="px-4 sm:px-5 pt-4 pb-3 flex items-baseline justify-between gap-2">
             <div>
-              <h2 className="text-[15px] font-medium text-[var(--text-primary)]">Failure reasons</h2>
+              <h2 className="text-[15px] font-medium text-[var(--text-primary)]">
+                Failure reasons
+              </h2>
               <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
                 Confirmed failed round trips classified from on-chain Soroban diagnostics
               </p>
@@ -738,7 +814,9 @@ export default function ArbitragePage() {
               return (
                 <div key={item.reason} className="px-4 sm:px-5 py-3">
                   <div className="flex items-center justify-between gap-3 text-[12px]">
-                    <span className="text-[var(--text-secondary)]">{failureReasonLabel(item.reason)}</span>
+                    <span className="text-[var(--text-secondary)]">
+                      {failureReasonLabel(item.reason)}
+                    </span>
                     <span className="text-[var(--text-muted)] tabular-nums">
                       {item.count.toLocaleString()} · {share.toFixed(1)}%
                     </span>
@@ -755,7 +833,9 @@ export default function ArbitragePage() {
             {(statusCounts.unclassified_failed_count ?? 0) > 0 && (
               <div className="px-4 sm:px-5 py-3">
                 <div className="flex items-center justify-between gap-3 text-[12px]">
-                  <span className="text-[var(--text-secondary)]">Unclassified or legacy failure</span>
+                  <span className="text-[var(--text-secondary)]">
+                    Unclassified or legacy failure
+                  </span>
                   <span className="text-[var(--text-muted)] tabular-nums">
                     {(statusCounts.unclassified_failed_count ?? 0).toLocaleString()}
                   </span>
@@ -890,12 +970,20 @@ function StatusCard({
 }: {
   label: string;
   value: string;
-  tone: 'success' | 'failed';
+  tone: 'success' | 'failed' | 'neutral';
 }) {
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-4 py-3">
       <div className="text-[11px] text-[var(--text-muted)]">{label}</div>
-      <div className={`mt-1 text-xl tabular-nums ${tone === 'success' ? 'text-teal-200' : 'text-rose-200'}`}>
+      <div
+        className={`mt-1 text-xl tabular-nums ${
+          tone === 'success'
+            ? 'text-teal-200'
+            : tone === 'failed'
+              ? 'text-rose-200'
+              : 'text-[var(--text-primary)]'
+        }`}
+      >
         {value}
       </div>
     </div>

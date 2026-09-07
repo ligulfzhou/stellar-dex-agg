@@ -188,6 +188,20 @@ curl -s https://api.lumagg.xyz/api/v1/stats | jq .
 
 示例导出：[sample-indexer-export.json](./sample-indexer-export.json) · 数据管线：[analytics-indexer.md](./analytics-indexer.md)。
 
+### 套利统计
+
+如需只统计套利交易，可直接按时间粒度查询：
+
+```bash
+curl -sG https://api.lumagg.xyz/api/v1/arbitrage/stats \
+  --data-urlencode "granularity=day" \
+  --data-urlencode "start=$(date -d '30 days ago' +%s)" \
+  --data-urlencode "end=$(date +%s)" | jq .
+```
+
+`data.buckets[]` 包含 `success_count`、`failed_count` 和 `tx_count`。
+`xlm_surplus` 使用 stroops，`usdc_surplus` 使用 USDC 最小单位；只有链上确认成功的套利交易才会计入 surplus。`granularity` 可使用 `hour`、`day`、`week` 或 `month`。
+
 ### 钱包 Swap 历史
 
 查询某个 Stellar 账户最近的 LumAgg 聚合器调用记录（与 `/stats` 使用同一 indexer 数据库）：

@@ -201,16 +201,10 @@ mod tests {
         },
         axum::{http::StatusCode, response::IntoResponse},
         serde_json::Value,
-        std::sync::{Mutex, OnceLock},
         tempfile::tempdir,
     };
 
     const TEST_USER: &str = "GA6RKSBPI2TSP52OW2IJTPK7LRMX24DF42KF3FBGBNMBYCV6NPDMOCBY";
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
-    }
 
     fn seed_db(path: &std::path::Path) {
         let store = IndexStore::open(path).unwrap();
@@ -297,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_db_env_is_503() {
-        let _guard = env_lock();
+        let _guard = crate::test_env_lock().lock().unwrap();
         std::env::remove_var("INDEXER_DB_PATH");
         std::env::remove_var("LUMAGG_INDEXER_DB_PATH");
         let resp = get_swaps(Query(SwapsQuery {
@@ -312,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_db_is_503() {
-        let _guard = env_lock();
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("missing").join("idx.db");
         std::env::set_var("INDEXER_DB_PATH", path.to_str().unwrap());
@@ -329,7 +323,7 @@ mod tests {
 
     #[tokio::test]
     async fn returns_rows_when_db_configured() {
-        let _guard = env_lock();
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("idx.db");
         seed_db(&path);
@@ -351,7 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn cursor_pages_through_history() {
-        let _guard = env_lock();
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("idx.db");
         seed_db(&path);

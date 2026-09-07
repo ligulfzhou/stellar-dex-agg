@@ -234,6 +234,48 @@ paths:
           description: Invalid `cursor`
         '503':
           description: INDEXER_DB_PATH not configured
+  /api/v1/arbitrage/stats:
+    get:
+      tags: [health]
+      summary: Aggregated arbitrage statistics
+      description: |
+        Time-bucketed confirmed round-trip results from the analytics indexer.
+        Surplus values are raw atomic units for XLM and USDC and only successful
+        transactions contribute to surplus. Requires `INDEXER_DB_PATH` on the API server.
+      parameters:
+        - name: granularity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [hour, day, week, month]
+            default: day
+          description: Bucket size. The default window is selected from the granularity.
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Inclusive Unix timestamp in seconds.
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Exclusive Unix timestamp in seconds. Defaults to the current time.
+      responses:
+        '200':
+          description: Aggregated arbitrage buckets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArbitrageStatsResponse'
+        '400':
+          description: Invalid granularity or timestamp range
+        '503':
+          description: INDEXER_DB_PATH not configured
   /api/v1/swaps:
     get:
       tags: [health]
@@ -1028,6 +1070,60 @@ components:
               description: Pass as `cursor` to fetch the next older page; omitted when no further rows
         error:
           type: string
+    ArbitrageStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            granularity:
+              type: string
+              enum: [hour, day, week, month]
+            start:
+              type: integer
+              format: int64
+            end:
+              type: integer
+              format: int64
+            buckets:
+              type: array
+              items:
+                $ref: '#/components/schemas/ArbitrageStatsBucket'
+        error:
+          type: string
+    ArbitrageStatsBucket:
+      type: object
+      required: [start, label, tx_count, success_count, failed_count, xlm_tx_count, usdc_tx_count, xlm_surplus, usdc_surplus]
+      properties:
+        start:
+          type: integer
+          format: int64
+          description: Bucket start as a Unix timestamp in seconds.
+        label:
+          type: string
+        tx_count:
+          type: integer
+          format: int64
+        success_count:
+          type: integer
+          format: int64
+        failed_count:
+          type: integer
+          format: int64
+        xlm_tx_count:
+          type: integer
+          format: int64
+        usdc_tx_count:
+          type: integer
+          format: int64
+        xlm_surplus:
+          type: string
+          description: Successful XLM surplus in stroops.
+        usdc_surplus:
+          type: string
+          description: Successful USDC surplus in smallest token units.
     RoundTripItem:
       type: object
       properties:

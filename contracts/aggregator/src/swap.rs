@@ -53,7 +53,7 @@ pub fn swap(
         &token_out,
         total_in,
         total_output,
-        sub_routes.len() as u32,
+        sub_routes.len(),
     );
 
     total_output

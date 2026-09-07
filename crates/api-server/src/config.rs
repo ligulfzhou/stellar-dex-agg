@@ -201,13 +201,7 @@ impl AppConfig {
 mod tests {
     use {
         super::*,
-        std::sync::{Mutex, OnceLock},
     };
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn default_config_uses_default_snapshot_redis_settings() {
@@ -227,7 +221,7 @@ mod tests {
 
     #[test]
     fn from_env_reads_snapshot_redis_channel_and_keep_latest() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::test_env_lock().lock().unwrap();
         let original_channel = std::env::var("SNAPSHOT_REDIS_CHANNEL").ok();
         let original_keep_latest = std::env::var("SNAPSHOT_REDIS_KEEP_LATEST").ok();
         std::env::set_var("SNAPSHOT_REDIS_CHANNEL", "snapshots:test");
@@ -250,7 +244,7 @@ mod tests {
 
     #[test]
     fn from_env_normalizes_zero_snapshot_poll_interval() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = crate::test_env_lock().lock().unwrap();
         let original = std::env::var("SNAPSHOT_POLL_INTERVAL_MS").ok();
         std::env::set_var("SNAPSHOT_POLL_INTERVAL_MS", "0");
 

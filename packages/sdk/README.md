@@ -64,6 +64,7 @@ const { unsignedTxXdr } = await client.buildTx({
 | `getTxStatus()` | `GET /tx_status` | One-shot status |
 | `waitForTx()` | polls `/tx_status` | Until SUCCESS / FAILED / timeout |
 | `getStats()` | `GET /stats` | On-chain indexer rollup; optional CSV |
+| `getArbitrageStats()` | `GET /arbitrage/stats` | Time-bucketed arbitrage success, failure, and surplus |
 | `listSwaps()` / orders / prices | see OpenAPI | |
 
 Order build methods return unsigned XDR for the configured Order Escrow

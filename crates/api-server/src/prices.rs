@@ -301,6 +301,7 @@ mod tests {
 
     #[tokio::test]
     async fn prices_returns_seeded_latest_tick() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("prices.db");
         std::env::set_var("PRICE_DB_PATH", &path);

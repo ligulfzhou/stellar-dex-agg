@@ -160,9 +160,9 @@ pub(crate) fn execute_step_inner(env: &Env, step: &SwapStep, amount_in: i128, my
                 my_address.into_val(env),
                 step.token_in.into_val(env),
                 amount_in.into_val(env),
-                none_val.clone(),
-                none_val.clone(),
-                none_val.clone(),
+                none_val,
+                none_val,
+                none_val,
                 none_val,
             ];
 

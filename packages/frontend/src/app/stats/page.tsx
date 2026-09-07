@@ -187,6 +187,8 @@ export default function StatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<ChartRange>(30);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +200,10 @@ export default function StatsPage() {
         if (!statsRes.success) {
           throw new Error(statsRes.error || 'stats request failed');
         }
-        if (!cancelled) setData(statsRes.data);
+        if (!cancelled) {
+          setData(statsRes.data);
+          setLastUpdated(new Date());
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -208,7 +213,7 @@ export default function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,6 +352,28 @@ export default function StatsPage() {
         </div>
         {data && (
           <div className="self-start sm:self-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                setRefreshKey((value) => value + 1);
+              }}
+              disabled={loading}
+              className="text-[12px] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)]/80 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] disabled:cursor-wait disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+            {lastUpdated && (
+              <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                Updated{' '}
+                {lastUpdated.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </span>
+            )}
             <a
               href="https://defillama.com/dex-aggregators/chain/stellar"
               target="_blank"
@@ -552,7 +579,7 @@ export default function StatsPage() {
                   ? '#3dd6c6'
                   : name.includes('split')
                     ? '#22d3ee'
-                : dexColor(name, i)
+                    : dexColor(name, i)
               }
             />
             <SharePanel
@@ -732,12 +759,9 @@ function SharePanel({
             const pct = (count / total) * 100;
             const color = colorFn(name, i);
             return (
-          <li key={name}>
-            <div className="flex items-center justify-between gap-2 text-[12px] mb-1.5">
-                  <span
-                    className="text-[var(--text-secondary)] font-medium truncate"
-                    title={name}
-                  >
+              <li key={name}>
+                <div className="flex items-center justify-between gap-2 text-[12px] mb-1.5">
+                  <span className="text-[var(--text-secondary)] font-medium truncate" title={name}>
                     {displayName ? displayName(name) : name}
                   </span>
                   <span className="text-[var(--text-muted)] tabular-nums shrink-0">
@@ -759,6 +783,147 @@ function SharePanel({
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+function ExecutionOutcomeChart({ days }: { days: DailyStats[] }) {
+  const visibleDays = days.slice(-31);
+  const maxTotal = Math.max(...visibleDays.map((day) => day.success_count + day.failed_count), 1);
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-4 sm:px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)]">Execution outcome</h2>
+          <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+            Confirmed on-chain transactions by day
+          </p>
+        </div>
+        <div className="flex gap-3 text-[11px] text-[var(--text-muted)]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-teal-300" /> Success
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-rose-300" /> Failed
+          </span>
+        </div>
+      </div>
+      {visibleDays.length === 0 ? (
+        <p className="h-40 pt-14 text-center text-[13px] text-[var(--text-muted)]">No data yet</p>
+      ) : (
+        <div className="mt-5 flex h-40 items-end gap-1.5 sm:gap-2 border-b border-[var(--border)]">
+          {visibleDays.map((day) => {
+            const total = day.success_count + day.failed_count;
+            const totalHeight = (total / maxTotal) * 100;
+            const successHeight = total > 0 ? (day.success_count / total) * totalHeight : 0;
+            const failedHeight = Math.max(totalHeight - successHeight, 0);
+            return (
+              <div
+                key={day.day}
+                className="group relative flex min-w-0 flex-1 flex-col justify-end h-full"
+                aria-label={`${day.day}: ${day.success_count} success, ${day.failed_count} failed`}
+                onMouseEnter={() => setHoveredDay(day.day)}
+                onMouseLeave={() => setHoveredDay(null)}
+              >
+                {hoveredDay === day.day && (
+                  <div className="pointer-events-none absolute bottom-[calc(100%-1.5rem)] left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--border-strong)] bg-[var(--bg-0)] px-3 py-2 text-[11px] shadow-xl">
+                    <div className="font-medium text-[var(--text-primary)]">{day.day}</div>
+                    <div className="mt-1 text-teal-200">Success: {day.success_count.toLocaleString()}</div>
+                    <div className="text-rose-200">Failed: {day.failed_count.toLocaleString()}</div>
+                    <div className="mt-1 border-t border-[var(--border)] pt-1 text-[var(--text-muted)]">
+                      Total: {total.toLocaleString()}
+                    </div>
+                  </div>
+                )}
+                <div className="relative mx-auto flex h-full w-full max-w-5 flex-col justify-end">
+                  <div
+                    className="w-full rounded-t-[3px] bg-rose-300/75 transition-[height] duration-500 group-hover:bg-rose-200"
+                    style={{ height: `${failedHeight}%` }}
+                  />
+                  <div
+                    className="w-full bg-teal-300/85 transition-[height] duration-500 group-hover:bg-teal-200"
+                    style={{ height: `${successHeight}%` }}
+                  />
+                </div>
+                <span className="mt-2 truncate text-center text-[10px] text-[var(--text-muted)]">
+                  {shortDay(day.day)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ActivityTrendChart({ days }: { days: DailyStats[] }) {
+  const visibleDays = days.slice(-31);
+  const maxValue = Math.max(...visibleDays.flatMap((day) => [day.tx_count, day.unique_users]), 1);
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-4 sm:px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-medium text-[var(--text-primary)]">Network activity</h2>
+          <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+            LumAgg invocations and unique callers by day
+          </p>
+        </div>
+        <div className="flex gap-3 text-[11px] text-[var(--text-muted)]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-cyan-300" /> Tx
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-slate-400" /> Users
+          </span>
+        </div>
+      </div>
+      {visibleDays.length === 0 ? (
+        <p className="h-40 pt-14 text-center text-[13px] text-[var(--text-muted)]">No data yet</p>
+      ) : (
+        <div className="mt-5 flex h-40 items-end gap-1.5 sm:gap-2 border-b border-[var(--border)]">
+          {visibleDays.map((day) => (
+            <div
+              key={day.day}
+              className="group relative flex min-w-0 flex-1 items-end gap-0.5 h-full"
+              aria-label={`${day.day}: ${day.tx_count} transactions, ${day.unique_users} users`}
+              onMouseEnter={() => setHoveredDay(day.day)}
+              onMouseLeave={() => setHoveredDay(null)}
+            >
+              {hoveredDay === day.day && (
+                <div className="pointer-events-none absolute bottom-[calc(100%-1.5rem)] left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--border-strong)] bg-[var(--bg-0)] px-3 py-2 text-[11px] shadow-xl">
+                  <div className="font-medium text-[var(--text-primary)]">{day.day}</div>
+                  <div className="mt-1 text-cyan-200">Transactions: {day.tx_count.toLocaleString()}</div>
+                  <div className="text-slate-300">Users: {day.unique_users.toLocaleString()}</div>
+                </div>
+              )}
+              <div className="flex h-full flex-1 items-end">
+                <div
+                  className="w-full rounded-t-[3px] bg-cyan-300/80 transition-[height] duration-500 group-hover:bg-cyan-200"
+                  style={{ height: `${(day.tx_count / maxValue) * 100}%` }}
+                />
+              </div>
+              <div className="flex h-full flex-1 items-end">
+                <div
+                  className="w-full rounded-t-[3px] bg-slate-400/70 transition-[height] duration-500 group-hover:bg-slate-300"
+                  style={{ height: `${(day.unique_users / maxValue) * 100}%` }}
+                />
+              </div>
+              <span className="absolute sr-only">{shortDay(day.day)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 flex justify-between text-[10px] text-[var(--text-muted)]">
+        <span>{visibleDays[0] ? shortDay(visibleDays[0].day) : ''}</span>
+        <span>
+          {visibleDays.length > 1 ? shortDay(visibleDays[visibleDays.length - 1].day) : ''}
+        </span>
+      </div>
     </section>
   );
 }

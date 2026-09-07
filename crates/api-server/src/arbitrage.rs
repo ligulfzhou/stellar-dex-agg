@@ -103,10 +103,7 @@ fn bucket_start(ts: i64, granularity: &str) -> Option<DateTime<Utc>> {
     let dt = Utc.timestamp_opt(ts, 0).single()?;
     let date = dt.date_naive();
     let day = match granularity {
-        "hour" => dt
-            .with_minute(0)?
-            .with_second(0)?
-            .with_nanosecond(0)?,
+        "hour" => dt.with_minute(0)?.with_second(0)?.with_nanosecond(0)?,
         "day" => date.and_hms_opt(0, 0, 0)?.and_utc(),
         "week" => (date - Duration::days(i64::from(date.weekday().num_days_from_monday())))
             .and_hms_opt(0, 0, 0)?
@@ -478,12 +475,116 @@ pub async fn get_arbitrage_stats(Query(params): Query<ArbitrageStatsQuery>) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::gross_surplus;
+    use {
+        super::{
+            bucket_start, default_window, get_arbitrage_stats, gross_surplus, ArbitrageStatsQuery,
+            StatusCode, XLM_SAC, USDC_SAC,
+        },
+        analytics_indexer::{
+            parser::ParsedInvocation,
+            store::{IndexStore, StoredInvocation},
+        },
+        axum::extract::Query,
+        chrono::{TimeZone, Utc},
+        serde_json::Value,
+        tempfile::tempdir,
+    };
 
     #[test]
     fn surplus_is_out_minus_in() {
         assert_eq!(gross_surplus("10000000", Some("10005000")).as_deref(), Some("5000"));
         assert_eq!(gross_surplus("100", None), None);
         assert_eq!(gross_surplus("bad", Some("1")), None);
+    }
+
+    #[test]
+    fn buckets_timestamp_by_utc_granularity() {
+        let ts = Utc.with_ymd_and_hms(2026, 8, 26, 15, 42, 17).unwrap().timestamp();
+
+        assert_eq!(
+            bucket_start(ts, "hour").unwrap().to_rfc3339(),
+            "2026-08-26T15:00:00+00:00"
+        );
+        assert_eq!(
+            bucket_start(ts, "day").unwrap().to_rfc3339(),
+            "2026-08-26T00:00:00+00:00"
+        );
+        assert_eq!(
+            bucket_start(ts, "week").unwrap().to_rfc3339(),
+            "2026-08-24T00:00:00+00:00"
+        );
+        assert_eq!(
+            bucket_start(ts, "month").unwrap().to_rfc3339(),
+            "2026-08-01T00:00:00+00:00"
+        );
+        assert!(bucket_start(ts, "quarter").is_none());
+    }
+
+    #[test]
+    fn default_windows_end_at_requested_timestamp() {
+        let end = Utc.with_ymd_and_hms(2026, 8, 26, 15, 42, 17).unwrap().timestamp();
+
+        let (hour_start, hour_end) = default_window("hour", end);
+        assert_eq!(hour_end, end);
+        assert_eq!(hour_end - hour_start, 24 * 60 * 60);
+
+        let (month_start, month_end) = default_window("month", end);
+        assert_eq!(month_end, end);
+        assert_eq!(month_end - month_start, 365 * 24 * 60 * 60);
+    }
+
+    #[tokio::test]
+    async fn stats_counts_statuses_and_successful_surplus_by_token() {
+        let _guard = crate::test_env_lock().lock().unwrap();
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("stats.db");
+        let store = IndexStore::open(&path).unwrap();
+        let created_at = Utc.with_ymd_and_hms(2026, 8, 26, 15, 42, 17).unwrap().timestamp();
+
+        for (tx_hash, status, token_in, amount_in, amount_out) in [
+            ("success-xlm", "SUCCESS", XLM_SAC, "100000000", Some("100001000")),
+            ("success-usdc", "SUCCESS", USDC_SAC, "2000000", Some("2000500")),
+            ("failed-xlm", "FAILED", XLM_SAC, "300000000", Some("999999999")),
+        ] {
+            store
+                .insert_invocation(&StoredInvocation {
+                    tx_hash: tx_hash.into(),
+                    ledger: 1,
+                    created_at,
+                    status: status.into(),
+                    failure_reason: None,
+                    parsed: ParsedInvocation {
+                        function_name: "round_trip_swap".into(),
+                        user_address: "USER".into(),
+                        token_in: Some(token_in.into()),
+                        token_out: Some(token_in.into()),
+                        bridge_token: Some("BRIDGE".into()),
+                        amount_in: amount_in.parse().unwrap(),
+                        amount_out: amount_out.map(str::parse).transpose().unwrap(),
+                        is_split: false,
+                        legs: Vec::new(),
+                    },
+                })
+                .unwrap();
+        }
+        std::env::set_var("INDEXER_DB_PATH", &path);
+
+        let response = get_arbitrage_stats(Query(ArbitrageStatsQuery {
+            granularity: Some("hour".into()),
+            start: Some(created_at - 1),
+            end: Some(created_at + 1),
+        }))
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let bucket = &json["data"]["buckets"][0];
+        assert_eq!(bucket["tx_count"], 3);
+        assert_eq!(bucket["success_count"], 2);
+        assert_eq!(bucket["failed_count"], 1);
+        assert_eq!(bucket["xlm_tx_count"], 1);
+        assert_eq!(bucket["usdc_tx_count"], 1);
+        assert_eq!(bucket["xlm_surplus"], "1000");
+        assert_eq!(bucket["usdc_surplus"], "500");
     }
 }

@@ -164,6 +164,37 @@ export interface StatsParams {
   format?: "json" | "csv";
 }
 
+export type ArbitrageGranularity = "hour" | "day" | "week" | "month";
+
+export interface ArbitrageStatsParams {
+  granularity?: ArbitrageGranularity;
+  /** Inclusive Unix timestamp in seconds. */
+  start?: number;
+  /** Exclusive Unix timestamp in seconds. */
+  end?: number;
+}
+
+export interface ArbitrageStatsBucket {
+  start: number;
+  label: string;
+  txCount: number;
+  successCount: number;
+  failedCount: number;
+  xlmTxCount: number;
+  usdcTxCount: number;
+  /** XLM surplus in stroops. */
+  xlmSurplus: string;
+  /** USDC surplus in the token's smallest unit. */
+  usdcSurplus: string;
+}
+
+export interface ArbitrageStatsResult {
+  granularity: ArbitrageGranularity;
+  start: number;
+  end: number;
+  buckets: ArbitrageStatsBucket[];
+}
+
 export interface SwapRecord {
   txHash: string;
   ledger: number;
@@ -748,6 +779,41 @@ export class LumAggClient {
       cursorLedger: d.cursor_ledger,
       oldestCreatedAt: d.oldest_created_at,
       daily: (d.daily || []).map(mapDailyStats),
+    };
+  }
+
+  /** Time-bucketed confirmed arbitrage results and surplus. */
+  async getArbitrageStats(
+    params: ArbitrageStatsParams = {},
+  ): Promise<ArbitrageStatsResult> {
+    const search = new URLSearchParams();
+    if (params.granularity) search.set("granularity", params.granularity);
+    if (params.start != null) search.set("start", String(params.start));
+    if (params.end != null) search.set("end", String(params.end));
+
+    const qs = search.toString();
+    const url = `${this.baseUrl}/api/v1/arbitrage/stats${qs ? `?${qs}` : ""}`;
+    const resp = await fetch(url, { headers: this.headers() });
+    const json = await resp.json();
+    if (!resp.ok || !json.success) {
+      throw new Error(json.error || `arbitrage stats: HTTP ${resp.status}`);
+    }
+    const d = json.data;
+    return {
+      granularity: d.granularity,
+      start: Number(d.start),
+      end: Number(d.end),
+      buckets: (d.buckets || []).map((bucket: Record<string, unknown>) => ({
+        start: Number(bucket.start ?? 0),
+        label: String(bucket.label ?? ""),
+        txCount: Number(bucket.tx_count ?? 0),
+        successCount: Number(bucket.success_count ?? 0),
+        failedCount: Number(bucket.failed_count ?? 0),
+        xlmTxCount: Number(bucket.xlm_tx_count ?? 0),
+        usdcTxCount: Number(bucket.usdc_tx_count ?? 0),
+        xlmSurplus: String(bucket.xlm_surplus ?? "0"),
+        usdcSurplus: String(bucket.usdc_surplus ?? "0"),
+      })),
     };
   }
 }

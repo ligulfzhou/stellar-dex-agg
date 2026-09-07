@@ -435,7 +435,7 @@ impl PoolStateStore for RedisPoolStateStore {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let values: Vec<Option<Vec<u8>>> = conn.mget(&keys).await?;
         let mut out = HashMap::new();
-        for (pool, bytes) in pool_addresses.iter().zip(values.into_iter()) {
+        for (pool, bytes) in pool_addresses.iter().zip(values) {
             let Some(bytes) = bytes else {
                 continue;
             };
@@ -471,7 +471,7 @@ impl PoolStateStore for RedisPoolStateStore {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let values: Vec<Option<Vec<u8>>> = conn.mget(&keys).await?;
         let mut out = HashMap::new();
-        for (pool, bytes) in pool_addresses.iter().zip(values.into_iter()) {
+        for (pool, bytes) in pool_addresses.iter().zip(values) {
             let Some(bytes) = bytes else {
                 continue;
             };
@@ -492,7 +492,7 @@ impl PoolStateStore for RedisPoolStateStore {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let values: Vec<Option<Vec<u8>>> = conn.mget(&keys).await?;
         let mut out = HashMap::new();
-        for ((source, pool), bytes) in refs.iter().zip(values.into_iter()) {
+        for ((source, pool), bytes) in refs.iter().zip(values) {
             let Some(bytes) = bytes else {
                 continue;
             };
@@ -513,7 +513,7 @@ impl PoolStateStore for RedisPoolStateStore {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let values: Vec<Option<Vec<u8>>> = conn.mget(&keys).await?;
         let mut out = HashMap::new();
-        for ((source, pool), bytes) in refs.iter().zip(values.into_iter()) {
+        for ((source, pool), bytes) in refs.iter().zip(values) {
             let Some(bytes) = bytes else {
                 continue;
             };
@@ -669,7 +669,7 @@ mod tests {
     async fn memory_pool_store_xyk_round_trip() {
         let store = MemoryPoolStateStore::new();
         let value = XykPoolStateValue::new("soroswap", "POOL1", "A", "B", 30, 100, 200);
-        store.set_xyk_batch(&[value.clone()]).await.unwrap();
+        store.set_xyk_batch(std::slice::from_ref(&value)).await.unwrap();
         let got = store.fetch_xyk(&[("soroswap".into(), "POOL1".into())]).await.unwrap();
         assert_eq!(got.get("soroswap:POOL1"), Some(&value));
     }

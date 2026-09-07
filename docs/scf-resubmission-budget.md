@@ -105,13 +105,13 @@ We reduced **$10k** (not 25–40%) because the **original line items for shipped
 
 **Budget:** $9,000 (Engineering: tx/event ingestion — dashboard UI in Tranche 3)
 
-**Brief description:** Start production analytics (**not implemented today**). Indexer ingests LumAgg **aggregator contract** invocations from Horizon/Soroban RPC: swap volume, tx count, function breakdown (**`split_swap` vs `round_trip_swap`**), unique wallet addresses, per-leg **DEX attribution** (Soroswap, Aquarius, Phoenix, Sushi, Comet). Store time-series for ≥30 days by Tranche 3.
+**Brief description:** Operate production analytics. The indexer ingests LumAgg **aggregator contract** invocations from Soroban RPC and stores swap volume, transaction count, function breakdown (**`split_swap` vs `round_trip_swap`**), unique wallet addresses, per-leg **DEX attribution** (Soroswap, Aquarius, Phoenix, Sushi, Comet), and arbitrage surplus/failure status. Daily time-series data is exposed through the public API and dashboards for ongoing collection.
 
 **How to measure completion:**
 - Indexer running against mainnet aggregator contract ID(s)
 - Internal or API export: daily volume, tx count, unique users, per-function counts
 - Volume attribution spec drafted in `docs/`
-- Data pipeline documented for Tranche 3 dashboard
+- Data pipeline documented in `docs/analytics-indexer.md` and exposed through the public stats and arbitrage dashboards
 
 **Estimated date of completion:** July 31, 2026
 

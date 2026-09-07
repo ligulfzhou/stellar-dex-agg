@@ -57,6 +57,7 @@ does not receive or handle secret keys.
 | `GET` | `/api/v1/dca?user=G...` | Indexed DCA orders for a wallet |
 | `POST` | `/api/v1/dca/build_create` | Build unsigned DCA creation XDR |
 | `POST` | `/api/v1/dca/build_cancel` | Build unsigned DCA cancellation XDR |
+| `GET` | `/api/v1/arbitrage/stats` | Hourly, daily, weekly, or monthly arbitrage statistics |
 
 The normal integration flow is:
 

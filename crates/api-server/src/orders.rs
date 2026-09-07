@@ -748,6 +748,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_db_env_is_503() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         std::env::remove_var("INDEXER_DB_PATH");
         std::env::remove_var("LUMAGG_INDEXER_DB_PATH");
         let resp = get_orders(Query(OrdersQuery {
@@ -761,6 +762,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_escrow_contract_is_503_for_order_listing() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("idx.db");
         seed_db(&path);
@@ -782,6 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_db_is_503() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("missing").join("idx.db");
         std::env::set_var("INDEXER_DB_PATH", path.to_str().unwrap());
@@ -797,6 +800,7 @@ mod tests {
 
     #[tokio::test]
     async fn returns_rows_when_db_configured() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         let dir = tempdir().unwrap();
         let path = dir.path().join("idx.db");
         seed_db(&path);
@@ -851,6 +855,7 @@ mod tests {
 
     #[tokio::test]
     async fn build_create_missing_escrow_contract_is_503() {
+        let _guard = crate::test_env_lock().lock().unwrap();
         std::env::remove_var("ESCROW_CONTRACT");
         let resp = build_create(State(dummy_app_state().await), Ok(Json(valid_create_request())))
             .await

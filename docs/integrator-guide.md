@@ -201,6 +201,22 @@ curl -s https://api.lumagg.xyz/api/v1/stats | jq .
 
 Sample export: [sample-indexer-export.json](./sample-indexer-export.json) · pipeline: [analytics-indexer.md](./analytics-indexer.md).
 
+### Arbitrage statistics
+
+For arbitrage-only reporting, request time buckets directly:
+
+```bash
+curl -sG https://api.lumagg.xyz/api/v1/arbitrage/stats \
+  --data-urlencode "granularity=day" \
+  --data-urlencode "start=$(date -d '30 days ago' +%s)" \
+  --data-urlencode "end=$(date +%s)" | jq .
+```
+
+Each `data.buckets[]` entry includes `success_count`, `failed_count`, and
+`tx_count`. `xlm_surplus` is in stroops and `usdc_surplus` is in the token's
+smallest unit; only confirmed successful round trips contribute to surplus.
+Use `granularity=hour|day|week|month` for different reporting views.
+
 ### Wallet swap history
 
 Recent aggregator invocations for a connected wallet (same indexer DB as `/stats`):

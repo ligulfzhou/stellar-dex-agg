@@ -148,6 +148,33 @@ export interface StatsParams {
     /** When `csv`, returns raw CSV string instead of parsed JSON. */
     format?: "json" | "csv";
 }
+export type ArbitrageGranularity = "hour" | "day" | "week" | "month";
+export interface ArbitrageStatsParams {
+    granularity?: ArbitrageGranularity;
+    /** Inclusive Unix timestamp in seconds. */
+    start?: number;
+    /** Exclusive Unix timestamp in seconds. */
+    end?: number;
+}
+export interface ArbitrageStatsBucket {
+    start: number;
+    label: string;
+    txCount: number;
+    successCount: number;
+    failedCount: number;
+    xlmTxCount: number;
+    usdcTxCount: number;
+    /** XLM surplus in stroops. */
+    xlmSurplus: string;
+    /** USDC surplus in the token's smallest unit. */
+    usdcSurplus: string;
+}
+export interface ArbitrageStatsResult {
+    granularity: ArbitrageGranularity;
+    start: number;
+    end: number;
+    buckets: ArbitrageStatsBucket[];
+}
 export interface SwapRecord {
     txHash: string;
     ledger: number;
@@ -276,6 +303,8 @@ export declare class LumAggClient {
     waitForTx(hash: string, opts?: WaitForTxOptions): Promise<TxStatusResult>;
     /** Public on-chain stats from analytics-indexer (Tranche 3). */
     getStats(params?: StatsParams): Promise<StatsResult | string>;
+    /** Time-bucketed confirmed arbitrage results and surplus. */
+    getArbitrageStats(params?: ArbitrageStatsParams): Promise<ArbitrageStatsResult>;
 }
 /** @deprecated Use LumAggClient */
 export declare class StellarAggregator extends LumAggClient {
